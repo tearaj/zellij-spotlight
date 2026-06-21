@@ -1,0 +1,10 @@
+// plugin-config.kdl
+keybinds {
+    shared_except "locked" {
+        bind "Ctrl y" { 
+            LaunchOrFocusPlugin "file:zellij-session-explorer.wasm" {
+                floating true
+            }
+        }
+    }
+}
