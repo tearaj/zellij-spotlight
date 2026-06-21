@@ -68,31 +68,38 @@ impl PluginState {
             
             if should_include_tab {
                 results.push(FilteredItem::Tab(tab.clone()));
-                for pane in matched_panes {
-                    results.push(FilteredItem::Pane { pane, tab_position: tab.position });
+                if self.search_mode != SearchMode::TabOnly {
+                    for pane in matched_panes {
+                        results.push(FilteredItem::Pane { pane, tab_position: tab.position });
+                    }
                 }
             }
         }
         results
     }
 
-    fn clamp_selection(&mut self) {
-        let results = self.filtered_results();
-        let mut pane_indices = Vec::new();
-        for (i, item) in results.iter().enumerate() {
-            if let FilteredItem::Pane { .. } = item {
-                pane_indices.push(i);
+    fn selectable_indices(&self) -> Vec<usize> {
+        let mut indices = Vec::new();
+        for (i, item) in self.filtered_results().iter().enumerate() {
+            match item {
+                FilteredItem::Tab(_) if self.search_mode == SearchMode::TabOnly => indices.push(i),
+                FilteredItem::Pane { .. } if self.search_mode != SearchMode::TabOnly => indices.push(i),
+                _ => {}
             }
         }
-        
-        if pane_indices.is_empty() {
+        indices
+    }
+
+    fn clamp_selection(&mut self) {
+        let indices = self.selectable_indices();
+        if indices.is_empty() {
             self.selection_index = 0;
             return;
         }
 
-        if !pane_indices.contains(&self.selection_index) {
-            let mut closest = pane_indices[0];
-            for &idx in &pane_indices {
+        if !indices.contains(&self.selection_index) {
+            let mut closest = indices[0];
+            for &idx in &indices {
                 if idx <= self.selection_index {
                     closest = idx;
                 } else {
@@ -107,30 +114,26 @@ impl PluginState {
     }
 
     fn move_selection_up(&mut self) {
-        let results = self.filtered_results();
-        let mut prev_pane_idx = None;
-        for (i, item) in results.iter().enumerate() {
-            if let FilteredItem::Pane { .. } = item {
-                if i < self.selection_index {
-                    prev_pane_idx = Some(i);
-                } else {
-                    break;
-                }
+        let indices = self.selectable_indices();
+        let mut prev_idx = None;
+        for &idx in &indices {
+            if idx < self.selection_index {
+                prev_idx = Some(idx);
+            } else {
+                break;
             }
         }
-        if let Some(idx) = prev_pane_idx {
+        if let Some(idx) = prev_idx {
             self.selection_index = idx;
         }
     }
 
     fn move_selection_down(&mut self) {
-        let results = self.filtered_results();
-        for (i, item) in results.iter().enumerate() {
-            if let FilteredItem::Pane { .. } = item {
-                if i > self.selection_index {
-                    self.selection_index = i;
-                    break;
-                }
+        let indices = self.selectable_indices();
+        for &idx in &indices {
+            if idx > self.selection_index {
+                self.selection_index = idx;
+                break;
             }
         }
     }
@@ -158,7 +161,11 @@ impl ViewRenderer for NestedViewRenderer {
             let is_selected = i == selection_index;
             match item {
                 FilteredItem::Tab(tab) => {
-                    output.push_str(&format!("▼ [Tab {}] {}\n", tab.position + 1, tab.name));
+                    if is_selected {
+                        output.push_str(&format!("▶ \x1b[32m[Tab {}] {}\x1b[0m\n", tab.position + 1, tab.name));
+                    } else {
+                        output.push_str(&format!("▼ [Tab {}] {}\n", tab.position + 1, tab.name));
+                    }
                 }
                 FilteredItem::Pane { pane, .. } => {
                     if is_selected {
@@ -223,12 +230,19 @@ impl ZellijPlugin for PluginState {
                     }
                     BareKey::Enter => {
                         let results = self.filtered_results();
-                        if let Some(FilteredItem::Pane { pane, tab_position }) = results.get(self.selection_index) {
-                            switch_tab_to(*tab_position as u32 + 1);
-                            if pane.is_plugin {
-                                focus_plugin_pane(pane.id, true, false);
-                            } else {
-                                focus_terminal_pane(pane.id, true, false);
+                        if let Some(item) = results.get(self.selection_index) {
+                            match item {
+                                FilteredItem::Pane { pane, tab_position } => {
+                                    switch_tab_to(*tab_position as u32 + 1);
+                                    if pane.is_plugin {
+                                        focus_plugin_pane(pane.id, true, false);
+                                    } else {
+                                        focus_terminal_pane(pane.id, true, false);
+                                    }
+                                }
+                                FilteredItem::Tab(tab) => {
+                                    switch_tab_to(tab.position as u32 + 1);
+                                }
                             }
                             self.search_query.clear();
                             self.selection_index = 0;
