@@ -4,6 +4,7 @@ keybinds {
         bind "Ctrl y" { 
             LaunchOrFocusPlugin "file:zellij-session-explorer.wasm" {
                 floating true
+                move_to_focused_tab true
             }
         }
     }

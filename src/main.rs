@@ -35,6 +35,18 @@ impl PluginState {
             
             if let Some(tab_panes) = self.panes.panes.get(&tab.position) {
                 for pane in tab_panes {
+                    // Ignore Zellij's default UI plugins and this plugin itself
+                    if pane.is_plugin {
+                        let lower_title = pane.title.to_lowercase();
+                        if lower_title.contains("tab-bar") 
+                            || lower_title.contains("status-bar") 
+                            || lower_title.contains("zellij-session-explorer")
+                            || lower_title.contains("session-manager")
+                        {
+                            continue;
+                        }
+                    }
+                    
                     let pane_matches = pane.title.to_lowercase().contains(&query);
                     let should_include_pane = match self.search_mode {
                         SearchMode::TabAndPane => pane_matches || tab_matches,
@@ -165,7 +177,10 @@ register_plugin!(PluginState);
 
 impl ZellijPlugin for PluginState {
     fn load(&mut self, _configuration: BTreeMap<String, String>) {
-        request_permission(&[PermissionType::ReadApplicationState]);
+        request_permission(&[
+            PermissionType::ReadApplicationState,
+            PermissionType::ChangeApplicationState,
+        ]);
         subscribe(&[
             EventType::TabUpdate,
             EventType::PaneUpdate,
@@ -209,7 +224,7 @@ impl ZellijPlugin for PluginState {
                     BareKey::Enter => {
                         let results = self.filtered_results();
                         if let Some(FilteredItem::Pane { pane, tab_position }) = results.get(self.selection_index) {
-                            switch_tab_to(*tab_position as u32);
+                            switch_tab_to(*tab_position as u32 + 1);
                             if pane.is_plugin {
                                 focus_plugin_pane(pane.id, true, false);
                             } else {
