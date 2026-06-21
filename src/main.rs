@@ -230,6 +230,8 @@ impl ZellijPlugin for PluginState {
                             } else {
                                 focus_terminal_pane(pane.id, true, false);
                             }
+                            self.search_query.clear();
+                            self.selection_index = 0;
                             hide_self();
                         }
                     }
@@ -239,6 +241,8 @@ impl ZellijPlugin for PluginState {
                         should_render = true;
                     }
                     BareKey::Char('c') if has_ctrl => {
+                        self.search_query.clear();
+                        self.selection_index = 0;
                         hide_self();
                     }
                     BareKey::Char(c) if !has_ctrl => {
@@ -247,6 +251,8 @@ impl ZellijPlugin for PluginState {
                         should_render = true;
                     }
                     BareKey::Esc => {
+                        self.search_query.clear();
+                        self.selection_index = 0;
                         hide_self();
                     }
                     _ => {}
