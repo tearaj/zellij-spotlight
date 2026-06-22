@@ -27,5 +27,6 @@ jobs:
       - name: Publish Release
         uses: softprops/action-gh-release@v2
         with:
-          files: target/wasm32-wasip1/release/zellij_session_explorer.wasm
+          files: target/wasm32-wasip1/release/zellij-spotlight.wasm
+          fail_on_unmatched_files: true
           generate_release_notes: true

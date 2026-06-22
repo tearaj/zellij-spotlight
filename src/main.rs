@@ -40,7 +40,7 @@ impl PluginState {
                         let lower_title = pane.title.to_lowercase();
                         if lower_title.contains("tab-bar") 
                             || lower_title.contains("status-bar") 
-                            || lower_title.contains("zellij-session-explorer")
+                            || lower_title.contains("zellij-spotlight")
                             || lower_title.contains("session-manager")
                         {
                             continue;

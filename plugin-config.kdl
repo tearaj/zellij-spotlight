@@ -2,7 +2,7 @@
 keybinds {
     shared_except "locked" {
         bind "Ctrl y" { 
-            LaunchOrFocusPlugin "file:zellij-session-explorer.wasm" {
+            LaunchOrFocusPlugin "file:zellij-spotlight.wasm" {
                 floating true
                 move_to_focused_tab true
             }

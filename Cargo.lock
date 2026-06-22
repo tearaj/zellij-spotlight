@@ -2514,7 +2514,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "zellij-session-explorer"
+name = "zellij-spotlight"
 version = "0.1.0"
 dependencies = [
  "zellij-tile",
