@@ -140,38 +140,48 @@ impl PluginState {
 }
 
 trait ViewRenderer {
-    fn render(&self, query: &str, items: &[FilteredItem], selection_index: usize, search_mode: &SearchMode) -> String;
+    fn render(&self, query: &str, items: &[FilteredItem], selection_index: usize, search_mode: &SearchMode, cols: usize) -> String;
 }
 
 struct NestedViewRenderer;
 
 impl ViewRenderer for NestedViewRenderer {
-    fn render(&self, query: &str, items: &[FilteredItem], selection_index: usize, search_mode: &SearchMode) -> String {
+    fn render(&self, query: &str, items: &[FilteredItem], selection_index: usize, search_mode: &SearchMode, cols: usize) -> String {
         let mut output = String::new();
         let mode_str = match search_mode {
-            SearchMode::TabAndPane => "Tab & Pane",
-            SearchMode::TabOnly => "Tab Only",
-            SearchMode::PaneOnly => "Pane Only",
+            SearchMode::TabAndPane => "TAB & PANE",
+            SearchMode::TabOnly => "TAB ONLY",
+            SearchMode::PaneOnly => "PANE ONLY",
         };
         
-        output.push_str(&format!("🔍 {}_ \t\t[Mode: {}]\n", query, mode_str));
-        output.push_str("──────────────────────────────────────────────────────────────\n");
+        let prompt_str = format!("Find > {}_", query);
+        let mode_display = format!("[{}]", mode_str);
+        
+        let padding_len = if cols > prompt_str.len() + mode_display.len() {
+            cols - prompt_str.len() - mode_display.len()
+        } else {
+            1
+        };
+        let padding = " ".repeat(padding_len);
+        
+        output.push_str(&format!("{}{}{}\n", prompt_str, padding, mode_display));
+        output.push_str(&format!("{}\n", "─".repeat(cols.max(1))));
         
         for (i, item) in items.iter().enumerate() {
             let is_selected = i == selection_index;
             match item {
                 FilteredItem::Tab(tab) => {
                     if is_selected {
-                        output.push_str(&format!("▶ \x1b[32m[Tab {}] {}\x1b[0m\n", tab.position + 1, tab.name));
+                        output.push_str(&format!("> \x1b[32m{}\x1b[0m\n", tab.name));
                     } else {
-                        output.push_str(&format!("▼ [Tab {}] {}\n", tab.position + 1, tab.name));
+                        output.push_str(&format!("  {}\n", tab.name));
                     }
                 }
                 FilteredItem::Pane { pane, .. } => {
                     if is_selected {
-                        output.push_str(&format!("  ├──▶ \x1b[32mPane: {}\x1b[0m\n", pane.title));
+                        output.push_str(&format!("    > \x1b[32m{}\x1b[0m\n", pane.title));
                     } else {
-                        output.push_str(&format!("  └──  Pane: {}\n", pane.title));
+                        output.push_str(&format!("      {}\n", pane.title));
                     }
                 }
             }
@@ -277,10 +287,10 @@ impl ZellijPlugin for PluginState {
         should_render
     }
 
-    fn render(&mut self, _rows: usize, _cols: usize) {
+    fn render(&mut self, _rows: usize, cols: usize) {
         let items = self.filtered_results();
         let renderer = NestedViewRenderer;
-        let view_string = renderer.render(&self.search_query, &items, self.selection_index, &self.search_mode);
+        let view_string = renderer.render(&self.search_query, &items, self.selection_index, &self.search_mode, cols);
         print!("{}", view_string);
     }
 }
