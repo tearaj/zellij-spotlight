@@ -16,6 +16,8 @@ struct PluginState {
     search_query: String,
     search_mode: SearchMode,
     selection_index: usize,
+    scroll_offset: usize,
+    show_preview: bool,
 }
 
 #[derive(Clone)]
@@ -140,13 +142,14 @@ impl PluginState {
 }
 
 trait ViewRenderer {
-    fn render(&self, query: &str, items: &[FilteredItem], selection_index: usize, search_mode: &SearchMode, cols: usize) -> String;
+    #[allow(clippy::too_many_arguments)]
+    fn render(&self, query: &str, items: &[FilteredItem], selection_index: usize, scroll_offset: usize, list_rows: usize, search_mode: &SearchMode, cols: usize, show_preview: bool) -> String;
 }
 
 struct NestedViewRenderer;
 
 impl ViewRenderer for NestedViewRenderer {
-    fn render(&self, query: &str, items: &[FilteredItem], selection_index: usize, search_mode: &SearchMode, cols: usize) -> String {
+    fn render(&self, query: &str, items: &[FilteredItem], selection_index: usize, scroll_offset: usize, list_rows: usize, search_mode: &SearchMode, cols: usize, show_preview: bool) -> String {
         let mut output = String::new();
         let mode_str = match search_mode {
             SearchMode::TabAndPane => "TAB & PANE",
@@ -167,25 +170,67 @@ impl ViewRenderer for NestedViewRenderer {
         output.push_str(&format!("{}{}{}\n", prompt_str, padding, mode_display));
         output.push_str(&format!("{}\n", "─".repeat(cols.max(1))));
         
-        for (i, item) in items.iter().enumerate() {
-            let is_selected = i == selection_index;
+        let visible_items = items.iter().skip(scroll_offset).take(list_rows).enumerate();
+        let mut selected_full_text = String::new();
+
+        for (i, item) in visible_items {
+            let actual_idx = i + scroll_offset;
+            let is_selected = actual_idx == selection_index;
             match item {
                 FilteredItem::Tab(tab) => {
                     if is_selected {
-                        output.push_str(&format!("> \x1b[32m{}\x1b[0m\n", tab.name));
+                        selected_full_text = format!("Tab: {}", tab.name);
+                    }
+                    let limit = cols.saturating_sub(2);
+                    let display_name = if tab.name.chars().count() > limit {
+                        let mut t: String = tab.name.chars().take(limit.saturating_sub(3)).collect();
+                        t.push_str("...");
+                        t
                     } else {
-                        output.push_str(&format!("  {}\n", tab.name));
+                        tab.name.clone()
+                    };
+
+                    if is_selected {
+                        output.push_str(&format!("> \x1b[32m{}\x1b[0m\n", display_name));
+                    } else {
+                        output.push_str(&format!("  \x1b[36m{}\x1b[0m\n", display_name));
                     }
                 }
                 FilteredItem::Pane { pane, .. } => {
                     if is_selected {
-                        output.push_str(&format!("    > \x1b[32m{}\x1b[0m\n", pane.title));
+                        selected_full_text = format!("Pane: {}", pane.title);
+                    }
+                    let limit = cols.saturating_sub(6);
+                    let display_name = if pane.title.chars().count() > limit {
+                        let mut t: String = pane.title.chars().take(limit.saturating_sub(3)).collect();
+                        t.push_str("...");
+                        t
                     } else {
-                        output.push_str(&format!("      {}\n", pane.title));
+                        pane.title.clone()
+                    };
+
+                    if is_selected {
+                        output.push_str(&format!("    > \x1b[32m{}\x1b[0m\n", display_name));
+                    } else {
+                        output.push_str(&format!("      \x1b[90m{}\x1b[0m\n", display_name));
                     }
                 }
             }
         }
+
+        if show_preview {
+            let limit = cols.saturating_sub(2);
+            let display_preview = if selected_full_text.chars().count() > limit * 2 {
+                let mut t: String = selected_full_text.chars().take((limit * 2).saturating_sub(3)).collect();
+                t.push_str("...");
+                t
+            } else {
+                selected_full_text
+            };
+            output.push_str(&format!("{}\n", "─".repeat(cols.max(1))));
+            output.push_str(&format!("  \x1b[1m{}\x1b[0m\n", display_preview));
+        }
+
         output
     }
 }
@@ -269,6 +314,10 @@ impl ZellijPlugin for PluginState {
                         self.selection_index = 0;
                         hide_self();
                     }
+                    BareKey::Char('e') if has_ctrl => {
+                        self.show_preview = !self.show_preview;
+                        should_render = true;
+                    }
                     BareKey::Char(c) if !has_ctrl => {
                         self.search_query.push(c);
                         self.clamp_selection();
@@ -287,10 +336,35 @@ impl ZellijPlugin for PluginState {
         should_render
     }
 
-    fn render(&mut self, _rows: usize, cols: usize) {
+    fn render(&mut self, rows: usize, cols: usize) {
         let items = self.filtered_results();
+        
+        let mut list_rows = rows.saturating_sub(3);
+        if self.show_preview {
+            list_rows = list_rows.saturating_sub(3);
+        }
+        
+        if list_rows > 0 {
+            if self.selection_index >= self.scroll_offset + list_rows {
+                self.scroll_offset = self.selection_index - list_rows + 1;
+            } else if self.selection_index < self.scroll_offset {
+                self.scroll_offset = self.selection_index;
+            }
+        } else {
+            self.scroll_offset = 0;
+        }
+
         let renderer = NestedViewRenderer;
-        let view_string = renderer.render(&self.search_query, &items, self.selection_index, &self.search_mode, cols);
+        let view_string = renderer.render(
+            &self.search_query, 
+            &items, 
+            self.selection_index, 
+            self.scroll_offset,
+            list_rows,
+            &self.search_mode, 
+            cols,
+            self.show_preview
+        );
         print!("{}", view_string);
     }
 }
